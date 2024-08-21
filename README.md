@@ -12,15 +12,10 @@ All communication between the client and server is done over encrypted websocket
 
 ## Setup
 
-To generate your private key for ssh:
-- open a terminal in /Thistle/Server
-- run the following: openssl genpkey -algorithm RSA -out private.key -pkeyopt rsa_keygen_bits:2048
-
-To generate your self signed certificates:
-- reuse the same terminal or open one again in the same server folder
-- run the following commands: 
+To generate all your needed keys/certificates:
+openssl genpkey -algorithm RSA -out private.key -pkeyopt rsa_keygen_bits:2048
 openssl genpkey -algorithm RSA -out server.key -pkeyopt rsa_keygen_bits:2048
-openssl req -new -key private.key -out server.csr
+openssl req -new -key server.key -out server.csr
 openssl x509 -req -days 3650 -in server.csr -signkey server.key -out server.crt
 
 modify the username and password inside users.json as needed.
@@ -43,5 +38,7 @@ Client setup:
 - if you are building from linux run it like this:
 - GOOS=windows go build -ldflags="-H=windowsgui"
 
-
-
+- For linux, you will need to change some environment variables.
+- when inside the linux folder, run the following in a powershell window -
+- $env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED="0"; go build -o thistle_linux.elf
+- This will build the linux client.

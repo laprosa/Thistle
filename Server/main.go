@@ -90,10 +90,22 @@ func handleChannel(ch ssh.NewChannel, username string) {
 	clearTerminal(channel)
 	startLoadingAnimation(channel)
 	clearTerminal(channel)
-	fmt.Fprintln(channel, getRandomQuote())
+	fmt.Fprint(channel, getRandomQuote())
 	time.Sleep(1500 * time.Millisecond)
 	online, offline, total := GetCounts()
 	fmt.Fprintf(channel, "\033]0;thistle - Total ["+total+"] Online ["+online+"] Offline ["+offline+"].\007")
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				online, offline, total := GetCounts()
+				fmt.Fprintf(channel, "\033]0;thistle - Total ["+total+"] Online ["+online+"] Offline ["+offline+"].\007")
+			}
+		}
+	}()
 	displayMenu(channel)
 	commandLoop(channel, username)
 }
@@ -143,13 +155,19 @@ func commandLoop(channel ssh.Channel, username string) {
 
 func startServer() {
 	http.HandleFunc("/thistle", handleWebsocketConnections)
+	http.HandleFunc("/hello", helloHandler)
 
 	// Start the server on localhost port 8080 and log any errors
-	log.Println("WebSocket server started on :8080")
-	err := http.ListenAndServeTLS(":8080", "server.crt", "server.key", nil)
+	log.Println("WebSocket server started on :56019")
+	err := http.ListenAndServeTLS("127.0.0.1:56019", "server.crt", "server.key", nil)
 	if err != nil {
 		log.Fatalf("ListenAndServeTLS: %v", err)
 	}
+}
+
+func helloHandler(w http.ResponseWriter, r *http.Request) {
+	// Send "Hello, World!" response
+	fmt.Fprintln(w, "Hello, World!")
 }
 
 func main() {
