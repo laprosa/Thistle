@@ -135,6 +135,9 @@ func commandLoop(channel ssh.Channel, username string) {
 		case command == ".download":
 			clearTerminal(channel)
 			download(channel)
+		case command == ".inject":
+			clearTerminal(channel)
+			inject(channel)
 		case command == ".update":
 			clearTerminal(channel)
 			update(channel)

